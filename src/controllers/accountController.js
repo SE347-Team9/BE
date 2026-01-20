@@ -4,7 +4,9 @@ const bcrypt = require('bcryptjs');
 // GET all accounts
 async function getAllAccounts(req, res) {
   try {
-    const query = `
+    const { role } = req.query;
+    
+    let query = `
       SELECT 
         a.account_id AS id,
         a.code,
@@ -15,12 +17,23 @@ async function getAllAccounts(req, res) {
         a.updated_at AS "updatedAt",
         u.full_name AS "fullName",
         u.email,
-        u.phone
+        u.phone,
+        u.staff_id AS "staffId",
+        u.agency_id AS "agencyId"
       FROM auth.account a
       LEFT JOIN auth."user" u ON u.account_id = a.account_id
-      ORDER BY a.created_at DESC
     `;
-    const result = await pool.query(query);
+    
+    // Filter by role if provided
+    if (role) {
+      query += ` WHERE a.role = $1 `;
+    }
+    
+    query += ` ORDER BY a.created_at DESC `;
+    
+    const result = role 
+      ? await pool.query(query, [role])
+      : await pool.query(query);
 
     res.json({
       success: true,
@@ -110,46 +123,34 @@ async function createAccount(req, res) {
     // Auto-generate account code based on role
     let accountCode;
     let prefix;
-    let countTable;
     
     switch (role) {
       case 'admin':
         prefix = 'ADM';
-        countTable = 'auth.account';
         break;
       case 'agency':
         prefix = 'DL';
-        countTable = 'master.agency';
         break;
       case 'staff':
         prefix = 'NV';
-        countTable = 'master.staff';
         break;
       default:
         prefix = 'ACC';
-        countTable = 'auth.account';
     }
     
-    // Get the next number for this role from appropriate table
-    let countResult;
-    if (role === 'agency') {
-      countResult = await client.query(
-        `SELECT COUNT(*) as count FROM master.agency WHERE code LIKE $1`,
-        [`${prefix}%`]
-      );
-    } else if (role === 'staff') {
-      countResult = await client.query(
-        `SELECT COUNT(*) as count FROM master.staff WHERE code LIKE $1`,
-        [`${prefix}%`]
-      );
-    } else {
-      countResult = await client.query(
-        `SELECT COUNT(*) as count FROM auth.account WHERE code LIKE $1`,
-        [`${prefix}%`]
-      );
+    // Find max existing number for this prefix and increment
+    const maxCodeResult = await client.query(
+      `SELECT code FROM auth.account WHERE code LIKE $1 ORDER BY code DESC LIMIT 1`,
+      [`${prefix}%`]
+    );
+    
+    let nextNumber = 1;
+    if (maxCodeResult.rows.length > 0) {
+      const maxCode = maxCodeResult.rows[0].code;
+      const maxNumber = parseInt(maxCode.replace(prefix, ''));
+      nextNumber = maxNumber + 1;
     }
     
-    const nextNumber = parseInt(countResult.rows[0].count) + 1;
     accountCode = `${prefix}${String(nextNumber).padStart(3, '0')}`;
 
     // Hash password
@@ -175,8 +176,8 @@ async function createAccount(req, res) {
     // If role is agency, create agency record first
     if (role === 'agency') {
       const agencyQuery = `
-        INSERT INTO master.agency (code, name, address, phone, email, level, sales_volume, current_debt, status)
-        VALUES ($1, $2, $3, $4, $5, 3, 0, 0, 'active')
+        INSERT INTO master.agency (code, name, address, phone, email, level, sales_volume, current_debt, debt_limit, status)
+        VALUES ($1, $2, $3, $4, $5, 3, 0, 0, 30000000, 'active')
         RETURNING agency_id
       `;
 

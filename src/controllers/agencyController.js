@@ -15,6 +15,7 @@ async function getAllAgencies(req, res) {
         ag.sales_volume AS "salesVolume",
         ag.current_debt AS "currentDebt",
         ag.debt_limit AS "debtLimit",
+        ag.managed_by_staff_id AS "managedByStaffId",
         ag.status,
         ag.created_at AS "createdAt",
         ag.updated_at AS "updatedAt",
@@ -31,6 +32,7 @@ async function getAllAgencies(req, res) {
       message: 'Get agencies successful',
     });
   } catch (error) {
+    console.error('Update agency error:', error);
     res.status(500).json({
       success: false,
       message: 'Error: ' + error.message,
@@ -55,7 +57,7 @@ async function getAgencyById(req, res) {
         ag.sales_volume AS "salesVolume",
         ag.current_debt AS "currentDebt",
         ag.debt_limit AS "debtLimit",
-        ag.managed_by_staff_id AS "managerId",
+        ag.managed_by_staff_id AS "managedByStaffId",
         ag.status,
         ag.created_at AS "createdAt",
         ag.updated_at AS "updatedAt",
@@ -131,20 +133,60 @@ async function createAgency(req, res) {
 async function updateAgency(req, res) {
   try {
     const { id } = req.params;
-    const { name, location, address, phone, email, status } = req.body;
+    const { name, location, address, phone, email, status, managedByStaffId } = req.body;
 
+    console.log('Update agency request', { id, body: req.body });
+
+    console.log('Update agency request:', { id, managedByStaffId, body: req.body });
+
+    // Build dynamic query based on provided fields
+    const updates = [];
+    const values = [];
+    let paramIndex = 1;
+
+    if (name !== undefined) {
+      updates.push(`name = $${paramIndex++}`);
+      values.push(name);
+    }
+    if (address !== undefined) {
+      updates.push(`address = $${paramIndex++}`);
+      values.push(address);
+    }
+    if (phone !== undefined) {
+      updates.push(`phone = $${paramIndex++}`);
+      values.push(phone);
+    }
+    if (email !== undefined) {
+      updates.push(`email = $${paramIndex++}`);
+      values.push(email);
+    }
+    if (status !== undefined) {
+      updates.push(`status = $${paramIndex++}`);
+      values.push(status);
+    }
+    if (managedByStaffId !== undefined) {
+      updates.push(`managed_by_staff_id = $${paramIndex++}`);
+      values.push(managedByStaffId);
+    }
+
+    if (updates.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'No fields to update',
+      });
+    }
+
+    values.push(id); // Add id as last parameter
     const query = `
       UPDATE master.agency
-      SET name = COALESCE($1, name),
-          address = COALESCE($2, address),
-          phone = COALESCE($3, phone),
-          email = COALESCE($4, email),
-          status = COALESCE($5, status)
-      WHERE agency_id = $6
+      SET ${updates.join(', ')}
+      WHERE agency_id = $${paramIndex}
       RETURNING *
     `;
 
-    const result = await pool.query(query, [name, address, phone, email, status, id]);
+    console.log('Executing update agency query', { query, values });
+
+    const result = await pool.query(query, values);
 
     if (result.rows.length === 0) {
       return res.status(404).json({
