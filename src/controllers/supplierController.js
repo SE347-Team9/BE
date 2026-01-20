@@ -184,10 +184,46 @@ async function deleteSupplier(req, res) {
   }
 }
 
+// GET products by supplier
+async function getProductsBySupplier(req, res) {
+  try {
+    const { id } = req.params;
+
+    const query = `
+      SELECT 
+        p.product_id AS id,
+        p.code,
+        p.name,
+        p.category,
+        p.unit,
+        p.price AS "unitPrice",
+        p.status,
+        p.created_at AS "createdAt",
+        p.updated_at AS "updatedAt"
+      FROM master.product p
+      WHERE p.supplier_id = $1
+      ORDER BY p.created_at DESC
+    `;
+    const result = await pool.query(query, [id]);
+
+    res.json({
+      success: true,
+      data: result.rows,
+      message: 'Get products by supplier successful',
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Error: ' + error.message,
+    });
+  }
+}
+
 module.exports = {
   getAllSuppliers,
   getSupplierById,
   createSupplier,
   updateSupplier,
   deleteSupplier,
+  getProductsBySupplier,
 };
