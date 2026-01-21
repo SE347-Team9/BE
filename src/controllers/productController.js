@@ -10,6 +10,8 @@ async function getAllProducts(req, res) {
         p.name,
         p.category,
         p.unit,
+        p.cost_price AS "costPrice",
+        p.selling_price AS "sellingPrice",
         p.price AS "unitPrice",
         p.status,
         p.created_at AS "createdAt",
@@ -46,6 +48,8 @@ async function getProductById(req, res) {
         p.name,
         p.category,
         p.unit,
+        p.cost_price AS "costPrice",
+        p.selling_price AS "sellingPrice",
         p.price AS "unitPrice",
         p.supplier_id AS "supplierId",
         p.status,
@@ -79,7 +83,7 @@ async function getProductById(req, res) {
 // POST create product
 async function createProduct(req, res) {
   try {
-    const { code, name, category, unit, unitPrice, stock } = req.body;
+    const { code, name, category, unit, costPrice, sellingPrice, unitPrice, stock } = req.body;
 
     if (!code || !name) {
       return res.status(400).json({
@@ -89,13 +93,13 @@ async function createProduct(req, res) {
     }
 
     const query = `
-      INSERT INTO master.product (code, name, category, unit, price, status)
-      VALUES ($1, $2, $3, $4, $5, 'active')
+      INSERT INTO master.product (code, name, category, unit, cost_price, selling_price, price, status)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, 'active')
       RETURNING *
     `;
 
     const result = await pool.query(query, [
-      code, name, category, unit, unitPrice
+      code, name, category, unit, costPrice || 0, sellingPrice || unitPrice || 0, sellingPrice || unitPrice || 0
     ]);
 
     res.status(201).json({
@@ -121,20 +125,22 @@ async function createProduct(req, res) {
 async function updateProduct(req, res) {
   try {
     const { id } = req.params;
-    const { name, category, unit, unitPrice, stock, status } = req.body;
+    const { name, category, unit, costPrice, sellingPrice, unitPrice, stock, status } = req.body;
 
     const query = `
       UPDATE master.product
       SET name = COALESCE($1, name),
           category = COALESCE($2, category),
           unit = COALESCE($3, unit),
-          price = COALESCE($4, price),
-          status = COALESCE($5, status)
-      WHERE product_id = $6
+          cost_price = COALESCE($4, cost_price),
+          selling_price = COALESCE($5, selling_price),
+          price = COALESCE($6, price),
+          status = COALESCE($7, status)
+      WHERE product_id = $8
       RETURNING *
     `;
 
-    const result = await pool.query(query, [name, category, unit, unitPrice, status, id]);
+    const result = await pool.query(query, [name, category, unit, costPrice, sellingPrice, sellingPrice || unitPrice, status, id]);
 
     if (result.rows.length === 0) {
       return res.status(404).json({

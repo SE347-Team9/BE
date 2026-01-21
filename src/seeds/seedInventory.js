@@ -52,37 +52,37 @@ async function seedInventoryData() {
 
     // Create diverse products (20+ products)
     await client.query(`
-      INSERT INTO master.product (code, name, supplier_id, category, unit, price, status)
+      INSERT INTO master.product (code, name, supplier_id, category, unit, cost_price, selling_price, price, status)
       VALUES
         -- Sản phẩm KHO THƯỜNG (không cần bảo quản lạnh)
-        ('SP001', 'Bia Hà Nội', $1, 'Đồ uống', 'Thùng', 350000, 'active'),
-        ('SP002', 'Nước ngọt Pepsi', $1, 'Đồ uống', 'Thùng', 280000, 'active'),
-        ('SP003', 'Nước khoáng LaVie', $1, 'Đồ uống', 'Thùng', 85000, 'active'),
-        ('SP004', 'Bánh quy Oreo', $2, 'Bánh kẹo', 'Hộp', 35000, 'active'),
-        ('SP005', 'Dầu ăn Neptune', $1, 'Thực phẩm', 'Chai', 65000, 'active'),
-        ('SP006', 'Mì gói Hảo Hảo', $1, 'Thực phẩm', 'Thùng', 120000, 'active'),
-        ('SP007', 'Nước mắm Nam Ngư', $1, 'Gia vị', 'Chai', 25000, 'active'),
-        ('SP008', 'Đường Biên Hòa', $1, 'Thực phẩm', 'Bao', 18000, 'active'),
-        ('SP009', 'Café Trung Nguyên', $1, 'Đồ uống', 'Gói', 85000, 'active'),
-        ('SP010', 'Bánh snack Oishi', $2, 'Bánh kẹo', 'Gói', 15000, 'active'),
-        ('SP011', 'Nước tương Chinsu', $1, 'Gia vị', 'Chai', 22000, 'active'),
-        ('SP012', 'Gạo ST25', $1, 'Thực phẩm', 'Bao', 180000, 'active'),
+        ('SP001', 'Bia Hà Nội', $1, 'Đồ uống', 'Thùng', 280000, 350000, 350000, 'active'),
+        ('SP002', 'Nước ngọt Pepsi', $1, 'Đồ uống', 'Thùng', 220000, 280000, 280000, 'active'),
+        ('SP003', 'Nước khoáng LaVie', $1, 'Đồ uống', 'Thùng', 65000, 85000, 85000, 'active'),
+        ('SP004', 'Bánh quy Oreo', $2, 'Bánh kẹo', 'Hộp', 28000, 35000, 35000, 'active'),
+        ('SP005', 'Dầu ăn Neptune', $1, 'Thực phẩm', 'Chai', 52000, 65000, 65000, 'active'),
+        ('SP006', 'Mì gói Hảo Hảo', $1, 'Thực phẩm', 'Thùng', 95000, 120000, 120000, 'active'),
+        ('SP007', 'Nước mắm Nam Ngư', $1, 'Gia vị', 'Chai', 20000, 25000, 25000, 'active'),
+        ('SP008', 'Đường Biên Hòa', $1, 'Thực phẩm', 'Bao', 14000, 18000, 18000, 'active'),
+        ('SP009', 'Café Trung Nguyên', $1, 'Đồ uống', 'Gói', 68000, 85000, 85000, 'active'),
+        ('SP010', 'Bánh snack Oishi', $2, 'Bánh kẹo', 'Gói', 12000, 15000, 15000, 'active'),
+        ('SP011', 'Nước tương Chinsu', $1, 'Gia vị', 'Chai', 17000, 22000, 22000, 'active'),
+        ('SP012', 'Gạo ST25', $1, 'Thực phẩm', 'Bao', 140000, 180000, 180000, 'active'),
         
         -- Sản phẩm KHO MÁT (bảo quản 2-8°C)
-        ('SP013', 'Sữa tươi Vinamilk', $3, 'Sữa', 'Lốc', 45000, 'active'),
-        ('SP014', 'Yaourt TH True Milk', $3, 'Sữa', 'Hộp', 38000, 'active'),
-        ('SP015', 'Phô mai Con Bò Cười', $4, 'Sữa', 'Hộp', 55000, 'active'),
-        ('SP016', 'Thịt heo tươi', $1, 'Thực phẩm', 'Kg', 95000, 'active'),
-        ('SP017', 'Thịt bò tươi', $1, 'Thực phẩm', 'Kg', 250000, 'active'),
-        ('SP018', 'Rau xanh tươi', $1, 'Thực phẩm', 'Kg', 25000, 'active'),
-        ('SP019', 'Trái cây tươi', $1, 'Thực phẩm', 'Kg', 45000, 'active'),
+        ('SP013', 'Sữa tươi Vinamilk', $3, 'Sữa', 'Lốc', 35000, 45000, 45000, 'active'),
+        ('SP014', 'Yaourt TH True Milk', $3, 'Sữa', 'Hộp', 30000, 38000, 38000, 'active'),
+        ('SP015', 'Phô mai Con Bò Cười', $4, 'Sữa', 'Hộp', 43000, 55000, 55000, 'active'),
+        ('SP016', 'Thịt heo tươi', $1, 'Thực phẩm', 'Kg', 75000, 95000, 95000, 'active'),
+        ('SP017', 'Thịt bò tươi', $1, 'Thực phẩm', 'Kg', 200000, 250000, 250000, 'active'),
+        ('SP018', 'Rau xanh tươi', $1, 'Thực phẩm', 'Kg', 18000, 25000, 25000, 'active'),
+        ('SP019', 'Trái cây tươi', $1, 'Thực phẩm', 'Kg', 35000, 45000, 45000, 'active'),
         
         -- Sản phẩm KHO ĐÔNG LẠNH (-18°C trở xuống)
-        ('SP020', 'Kem Walls Magnum', $2, 'Đồ uống', 'Hộp', 65000, 'active'),
-        ('SP021', 'Cá tra phi lê đông lạnh', $1, 'Thực phẩm', 'Kg', 85000, 'active'),
-        ('SP022', 'Tôm đông lạnh', $1, 'Thực phẩm', 'Kg', 180000, 'active'),
-        ('SP023', 'Thịt gà đông lạnh', $1, 'Thực phẩm', 'Kg', 75000, 'active'),
-        ('SP024', 'Pizza đông lạnh', $4, 'Thực phẩm', 'Hộp', 95000, 'active')
+        ('SP020', 'Kem Walls Magnum', $2, 'Đồ uống', 'Hộp', 52000, 65000, 65000, 'active'),
+        ('SP021', 'Cá tra phi lê đông lạnh', $1, 'Thực phẩm', 'Kg', 68000, 85000, 85000, 'active'),
+        ('SP022', 'Tôm đông lạnh', $1, 'Thực phẩm', 'Kg', 145000, 180000, 180000, 'active'),
+        ('SP023', 'Thịt gà đông lạnh', $1, 'Thực phẩm', 'Kg', 60000, 75000, 75000, 'active'),
+        ('SP024', 'Pizza đông lạnh', $4, 'Thực phẩm', 'Hộp', 75000, 95000, 95000, 'active')
     `, [sup1, sup2, sup3, sup4]);
     console.log('✅ Products seeded (24 products)');
 

@@ -196,6 +196,8 @@ async function getProductsBySupplier(req, res) {
         p.name,
         p.category,
         p.unit,
+        p.cost_price AS "costPrice",
+        p.selling_price AS "sellingPrice",
         p.price AS "unitPrice",
         p.status,
         p.created_at AS "createdAt",

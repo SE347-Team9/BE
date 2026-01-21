@@ -66,9 +66,14 @@ async function getAccountById(req, res) {
         u.email,
         u.phone,
         u.agency_id AS "agencyId",
-        u.staff_id AS "staffId"
+        u.staff_id AS "staffId",
+        ag.name AS "agencyName",
+        ag.address AS "agencyAddress",
+        ag.level AS "agencyType",
+        ag.debt_limit AS "debtLimit"
       FROM auth.account a
       LEFT JOIN auth."user" u ON u.account_id = a.account_id
+      LEFT JOIN master.agency ag ON ag.agency_id = u.agency_id
       WHERE a.account_id = $1
     `;
     const result = await pool.query(query, [id]);
