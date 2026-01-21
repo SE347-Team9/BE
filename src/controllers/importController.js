@@ -195,15 +195,8 @@ const createImport = async (req, res) => {
       agencyId = distResult.rows[0].agency_id;
       totalAmount = distResult.rows[0].total_amount;
     } else {
-      // Manual import without distribution
-      agencyId = req.body.agencyId;
-      if (!agencyId) {
-        await client.query('ROLLBACK');
-        return res.status(400).json({
-          success: false,
-          message: 'Vui lòng chọn đại lý'
-        });
-      }
+      // Manual import without distribution (warehouse import from supplier)
+      agencyId = req.body.agencyId || null;
       
       // Calculate total amount
       for (const product of products) {
@@ -213,17 +206,17 @@ const createImport = async (req, res) => {
     
     // Generate import code
     const codeResult = await client.query(
-      'SELECT COUNT(*) as count FROM imports'
+      'SELECT COUNT(*) as count FROM warehouse.import'
     );
     const count = parseInt(codeResult.rows[0].count) + 1;
     const code = `PN${String(count).padStart(5, '0')}`;
     
     // Insert import
     const insertResult = await client.query(
-      `INSERT INTO imports (code, distribution_id, agency_id, ship_date, receive_date, status, total_amount, notes, created_by, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
+      `INSERT INTO warehouse.import (import_code, supplier_id, import_date, total_amount, notes, created_by, status, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
        RETURNING *`,
-      [code, distributionId, agencyId, shipDate, receiveDate, 'pending', totalAmount, notes, userId]
+      [code, req.body.supplierId || null, shipDate, totalAmount, notes, userId, 'completed']
     );
     
     const importRecord = insertResult.rows[0];
@@ -231,9 +224,9 @@ const createImport = async (req, res) => {
     // Insert import products
     for (const product of products) {
       await client.query(
-        `INSERT INTO import_products (import_id, product_id, batch, mfg_date, exp_date, quantity, price)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [importRecord.id, product.productId, product.batch, product.mfgDate, product.expDate, product.quantity, product.price]
+        `INSERT INTO warehouse.import_detail (import_id, product_id, batch_code, quantity, unit_price, total_price, manufacturing_date, expiry_date)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [importRecord.import_id, product.productId, product.batch, product.quantity, product.price, product.quantity * product.price, product.mfgDate, product.expDate]
       );
     }
     

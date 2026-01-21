@@ -13,6 +13,7 @@ async function getAllProducts(req, res) {
         p.cost_price AS "costPrice",
         p.selling_price AS "sellingPrice",
         p.price AS "unitPrice",
+        p.supplier_id AS "supplierId",
         p.status,
         p.created_at AS "createdAt",
         p.updated_at AS "updatedAt",
