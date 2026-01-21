@@ -1,9 +1,15 @@
 const pool = require('../config/database');
 
+async function getStaffIdByAccountId(accountId) {
+  const result = await pool.query('SELECT staff_id FROM auth."user" WHERE account_id = $1', [accountId]);
+  return result.rows[0]?.staff_id || null;
+}
+
 // GET all agencies
 async function getAllAgencies(req, res) {
   try {
-    const query = `
+    const { role, userId } = req.user || {};
+    let query = `
       SELECT 
         ag.agency_id AS id,
         ag.code,
@@ -22,9 +28,27 @@ async function getAllAgencies(req, res) {
         st.full_name AS "managerName"
       FROM master.agency ag
       LEFT JOIN master.staff st ON st.staff_id = ag.managed_by_staff_id
-      ORDER BY ag.created_at DESC
     `;
-    const result = await pool.query(query);
+
+    const params = [];
+
+    if (role === 'staff') {
+      const staffId = await getStaffIdByAccountId(userId);
+
+      if (!staffId) {
+        return res.status(403).json({
+          success: false,
+          message: 'Staff profile not found for this account',
+        });
+      }
+
+      query += ' WHERE ag.managed_by_staff_id = $1';
+      params.push(staffId);
+    }
+
+    query += ' ORDER BY ag.created_at DESC';
+
+    const result = await pool.query(query, params);
 
     res.json({
       success: true,
@@ -44,6 +68,24 @@ async function getAllAgencies(req, res) {
 async function getAgencyById(req, res) {
   try {
     const { id } = req.params;
+    const { role, userId } = req.user || {};
+
+    let whereClause = 'WHERE ag.agency_id = $1';
+    const params = [id];
+
+    if (role === 'staff') {
+      const staffId = await getStaffIdByAccountId(userId);
+
+      if (!staffId) {
+        return res.status(403).json({
+          success: false,
+          message: 'Staff profile not found for this account',
+        });
+      }
+
+      whereClause += ' AND ag.managed_by_staff_id = $2';
+      params.push(staffId);
+    }
 
     const query = `
       SELECT 
@@ -64,9 +106,9 @@ async function getAgencyById(req, res) {
         st.full_name AS "managerName"
       FROM master.agency ag
       LEFT JOIN master.staff st ON st.staff_id = ag.managed_by_staff_id
-      WHERE ag.agency_id = $1
+      ${whereClause}
     `;
-    const result = await pool.query(query, [id]);
+    const result = await pool.query(query, params);
 
     if (result.rows.length === 0) {
       return res.status(404).json({
