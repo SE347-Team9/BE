@@ -36,23 +36,31 @@ async function login(req, res) {
       });
     }
 
-    // Get user info
+    // Get user info from auth.user table
     const userQuery = 'SELECT * FROM auth."user" WHERE account_id = $1';
     const userResult = await pool.query(userQuery, [account.account_id]);
-    const user = userResult.rows[0] || {};
+    const user = userResult.rows[0];
 
-    // Get agency ID if role is agency
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User information not found',
+      });
+    }
+
+    // Get the appropriate ID for token
+    let userId = user.user_id;
     let agencyId = user.agency_id || null;
 
     // Generate token
-    const token = generateToken(account.account_id, account.role, agencyId);
+    const token = generateToken(userId, account.role, agencyId);
 
     res.json({
       success: true,
       data: {
         id: account.account_id,
         username: account.username,
-        fullName: user.full_name || 'User',
+        fullName: user.full_name,
         role: account.role,
         token,
       },

@@ -3,7 +3,11 @@ const pool = require('../config/database');
 // GET all agencies
 async function getAllAgencies(req, res) {
   try {
-    const query = `
+    // Check if user is staff - only show agencies they manage
+    const userRole = req.user?.role;
+    const userId = req.user?.userId;
+    
+    let query = `
       SELECT 
         ag.agency_id AS id,
         ag.code,
@@ -22,8 +26,37 @@ async function getAllAgencies(req, res) {
         st.full_name AS "managerName"
       FROM master.agency ag
       LEFT JOIN master.staff st ON st.staff_id = ag.managed_by_staff_id
-      ORDER BY ag.created_at DESC
     `;
+    
+    // If user is staff, only show agencies they manage
+    if (userRole === 'staff' && userId) {
+      // Get staff_id from auth.user using user_id
+      const staffQuery = 'SELECT staff_id FROM auth."user" WHERE user_id = $1';
+      const staffResult = await pool.query(staffQuery, [userId]);
+      
+      if (staffResult.rows.length > 0 && staffResult.rows[0].staff_id) {
+        const staffId = staffResult.rows[0].staff_id;
+        query += ` WHERE ag.managed_by_staff_id = $1`;
+        query += ` ORDER BY ag.created_at DESC`;
+        const result = await pool.query(query, [staffId]);
+        
+        return res.json({
+          success: true,
+          data: result.rows,
+          message: 'Get agencies successful',
+        });
+      } else {
+        // Staff not found or has no staff_id, return empty
+        return res.json({
+          success: true,
+          data: [],
+          message: 'No agencies found',
+        });
+      }
+    }
+    
+    // Admin sees all agencies
+    query += ` ORDER BY ag.created_at DESC`;
     const result = await pool.query(query);
 
     res.json({
@@ -32,7 +65,7 @@ async function getAllAgencies(req, res) {
       message: 'Get agencies successful',
     });
   } catch (error) {
-    console.error('Update agency error:', error);
+    console.error('Get agencies error:', error);
     res.status(500).json({
       success: false,
       message: 'Error: ' + error.message,
