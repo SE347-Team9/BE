@@ -9,6 +9,7 @@ const { emitToRole, emitToUser, EVENTS } = require('../utils/socket');
 // Get all payments (filtered by role)
 const getAllPayments = async (req, res) => {
   try {
+    console.log('[getAllPayments] Called by user:', req.user);
     const { role, agencyId } = req.user;
     
     let query;
@@ -17,11 +18,14 @@ const getAllPayments = async (req, res) => {
     if (role === 'agency') {
       // Agency can only see their own payments
       query = `
-        SELECT p.*, a.name as agency_name, a.code as agency_code,
+        SELECT p.payment_id as id, p.code, p.agency_id,
+               p.amount, p.payment_date, p.note as notes, p.status, 
+               p.created_at, p.updated_at,
+               a.name as agency_name, a.code as agency_code,
                acc.username as created_by_name
-        FROM payments p
-        LEFT JOIN agencies a ON p.agency_id = a.id
-        LEFT JOIN accounts acc ON p.created_by = acc.id
+        FROM finance.payment p
+        LEFT JOIN master.agency a ON p.agency_id = a.agency_id
+        LEFT JOIN auth.account acc ON p.collected_by = acc.account_id
         WHERE p.agency_id = $1
         ORDER BY p.created_at DESC
       `;
@@ -29,16 +33,22 @@ const getAllPayments = async (req, res) => {
     } else {
       // Staff and admin can see all payments
       query = `
-        SELECT p.*, a.name as agency_name, a.code as agency_code,
+        SELECT p.payment_id as id, p.code, p.agency_id,
+               p.amount, p.payment_date, p.note as notes, p.status,
+               p.created_at, p.updated_at,
+               a.name as agency_name, a.code as agency_code,
                acc.username as created_by_name
-        FROM payments p
-        LEFT JOIN agencies a ON p.agency_id = a.id
-        LEFT JOIN accounts acc ON p.created_by = acc.id
+        FROM finance.payment p
+        LEFT JOIN master.agency a ON p.agency_id = a.agency_id
+        LEFT JOIN auth.account acc ON p.collected_by = acc.account_id
         ORDER BY p.created_at DESC
       `;
     }
     
     const result = await pool.query(query, params);
+    
+    console.log('[getAllPayments] Found', result.rows.length, 'payments');
+    console.log('[getAllPayments] First payment:', result.rows[0]);
     
     res.json({
       success: true,
@@ -60,13 +70,16 @@ const getPaymentById = async (req, res) => {
     const { role, agencyId } = req.user;
     
     let query = `
-      SELECT p.*, a.name as agency_name, a.code as agency_code,
+      SELECT p.payment_id as id, p.code, p.agency_id,
+             p.amount, p.payment_date, p.note as notes, p.status,
+             p.created_at, p.updated_at,
+             a.name as agency_name, a.code as agency_code,
              a.address as agency_address, a.phone as agency_phone,
              acc.username as created_by_name
-      FROM payments p
-      LEFT JOIN agencies a ON p.agency_id = a.id
-      LEFT JOIN accounts acc ON p.created_by = acc.id
-      WHERE p.id = $1
+      FROM finance.payment p
+      LEFT JOIN master.agency a ON p.agency_id = a.agency_id
+      LEFT JOIN auth.account acc ON p.collected_by = acc.account_id
+      WHERE p.payment_id = $1
     `;
     
     const params = [id];
@@ -134,7 +147,7 @@ const createPayment = async (req, res) => {
     
     // Get agency current debt
     const agencyResult = await client.query(
-      'SELECT current_debt FROM agencies WHERE id = $1',
+      'SELECT current_debt FROM master.agency WHERE agency_id = $1',
       [targetAgencyId]
     );
     
@@ -158,16 +171,16 @@ const createPayment = async (req, res) => {
     
     // Generate payment code
     const codeResult = await client.query(
-      'SELECT COUNT(*) as count FROM payments'
+      'SELECT COUNT(*) as count FROM finance.payment'
     );
     const count = parseInt(codeResult.rows[0].count) + 1;
     const code = `PT${String(count).padStart(5, '0')}`;
     
     // Insert payment
     const insertResult = await client.query(
-      `INSERT INTO payments (code, agency_id, amount, payment_date, notes, status, created_by, created_at, updated_at)
+      `INSERT INTO finance.payment (code, agency_id, amount, payment_date, note, status, collected_by, created_at, updated_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
-       RETURNING *`,
+       RETURNING payment_id as id, code, agency_id, amount, payment_date, note as notes, status, created_at, updated_at`,
       [code, targetAgencyId, amount, paymentDate || new Date(), notes, 'pending', userId]
     );
     
@@ -213,16 +226,9 @@ const confirmPayment = async (req, res) => {
     const { id } = req.params;
     const { role } = req.user;
     
-    if (role === 'agency') {
-      return res.status(403).json({
-        success: false,
-        message: 'Bạn không có quyền thực hiện thao tác này'
-      });
-    }
-    
     // Get payment
     const paymentResult = await client.query(
-      'SELECT * FROM payments WHERE id = $1',
+      'SELECT payment_id as id, code, agency_id, amount, status FROM finance.payment WHERE payment_id = $1',
       [id]
     );
     
@@ -244,33 +250,28 @@ const confirmPayment = async (req, res) => {
       });
     }
     
+    // Convert amount to number
+    const paymentAmount = typeof payment.amount === 'string' ? parseFloat(payment.amount) : payment.amount;
+    
     // Update payment status
     await client.query(
-      `UPDATE payments 
+      `UPDATE finance.payment 
        SET status = 'completed', updated_at = NOW()
-       WHERE id = $1`,
+       WHERE payment_id = $1`,
       [id]
-    );
-    
-    // Update agency debt
-    await client.query(
-      `UPDATE agencies 
-       SET current_debt = current_debt - $1, updated_at = NOW()
-       WHERE id = $2`,
-      [payment.amount, payment.agency_id]
     );
     
     const result = await client.query(
-      'SELECT * FROM payments WHERE id = $1',
+      'SELECT payment_id as id, code, agency_id, amount, payment_date, note as notes, status, created_at, updated_at FROM finance.payment WHERE payment_id = $1',
       [id]
     );
     
-    // Get updated agency debt
+    // Get agency info
     const agencyResult = await client.query(
-      'SELECT current_debt FROM agencies WHERE id = $1',
+      'SELECT current_debt FROM master.agency WHERE agency_id = $1',
       [payment.agency_id]
     );
-    const newDebt = agencyResult.rows[0].current_debt;
+    const currentDebt = agencyResult.rows[0] ? agencyResult.rows[0].current_debt : 0;
     
     await client.query('COMMIT');
     
@@ -283,12 +284,6 @@ const confirmPayment = async (req, res) => {
         code: result.rows[0].code,
         amount: payment.amount,
         message: 'Thanh toán đã được xác nhận'
-      });
-      // Notify about debt change
-      emitToRole(io, 'agency', EVENTS.AGENCY_DEBT_CHANGED, {
-        agencyId: payment.agency_id,
-        newDebt: newDebt,
-        message: `Công nợ mới: ${newDebt.toLocaleString('vi-VN')} VND`
       });
       // Also notify staff
       emitToRole(io, 'staff', EVENTS.PAYMENT_CONFIRMED, {
@@ -305,7 +300,11 @@ const confirmPayment = async (req, res) => {
       message: 'Xác nhận thanh toán thành công'
     });
   } catch (error) {
-    await client.query('ROLLBACK');
+    try {
+      await client.query('ROLLBACK');
+    } catch (rollbackError) {
+      console.error('Rollback error:', rollbackError);
+    }
     console.error('Error confirming payment:', error);
     res.status(500).json({
       success: false,
@@ -337,10 +336,10 @@ const getDebtInfo = async (req, res) => {
     }
     
     const result = await pool.query(
-      `SELECT id, code, name, current_debt, credit_limit,
-              (credit_limit - current_debt) as available_credit
-       FROM agencies 
-       WHERE id = $1`,
+      `SELECT agency_id as id, code, name, current_debt, debt_limit as credit_limit,
+              (debt_limit - current_debt) as available_credit
+       FROM master.agency 
+       WHERE agency_id = $1`,
       [targetAgencyId]
     );
     
@@ -371,7 +370,7 @@ const cancelPayment = async (req, res) => {
     const { role, agencyId } = req.user;
     
     // Check if payment exists
-    let checkQuery = 'SELECT * FROM payments WHERE id = $1';
+    let checkQuery = 'SELECT payment_id as id, code, agency_id, amount, status FROM finance.payment WHERE payment_id = $1';
     const checkParams = [id];
     
     if (role === 'agency') {
@@ -399,10 +398,10 @@ const cancelPayment = async (req, res) => {
     }
     
     const result = await pool.query(
-      `UPDATE payments 
+      `UPDATE finance.payment 
        SET status = 'cancelled', updated_at = NOW()
-       WHERE id = $1
-       RETURNING *`,
+       WHERE payment_id = $1
+       RETURNING payment_id as id, code, agency_id, amount, payment_date, note as notes, status, created_at, updated_at`,
       [id]
     );
     

@@ -33,7 +33,10 @@ app.use('/api/inventory', require('./routes/inventory'));
 app.use('/api/distributions', require('./routes/distributions'));
 app.use('/api/payments', require('./routes/payments'));
 app.use('/api/imports', require('./routes/imports'));
+app.use('/api/receive-orders', require('./routes/receiveOrders'));
+app.use('/api/agency-receives', require('./routes/agencyReceives'));
 app.use('/api/dashboard', require('./routes/dashboard'));
+app.use('/api/exports', require('./routes/exports'));
 
 // 404 Handler
 app.use((req, res) => {

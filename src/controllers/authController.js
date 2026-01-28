@@ -53,7 +53,7 @@ async function login(req, res) {
     let agencyId = user.agency_id || null;
 
     // Generate token
-    const token = generateToken(userId, account.role, agencyId);
+    const token = generateToken(userId, account.role, agencyId, account.account_id);
 
     res.json({
       success: true,

@@ -9,7 +9,7 @@ const { emitToRole, EVENTS } = require('../utils/socket');
 // Get all distributions (filtered by role)
 const getAllDistributions = async (req, res) => {
   try {
-    const { role, agencyId } = req.user;
+    const { role, agencyId, userId } = req.user;
     
     let query;
     let params = [];
@@ -17,7 +17,9 @@ const getAllDistributions = async (req, res) => {
     if (role === 'agency') {
       // Agency can only see their own distributions
       query = `
-        SELECT d.*, a.name as agency_name, a.code as agency_code,
+        SELECT d.distribution_id, d.distribution_code, d.agency_id, d.order_date, d.delivery_date,
+               d.total_amount, d.status, d.notes, d.created_by, d.created_at, d.updated_at,
+               a.name as agency_name, a.code as agency_code,
                acc.username as created_by_name,
                json_agg(json_build_object(
                  'product_id', dp.product_id,
@@ -25,23 +27,26 @@ const getAllDistributions = async (req, res) => {
                  'product_code', p.code,
                  'quantity', dp.quantity,
                  'unit', p.unit,
-                 'price', dp.price,
-                 'subtotal', dp.quantity * dp.price
-               )) as products
-        FROM distributions d
-        LEFT JOIN agencies a ON d.agency_id = a.id
-        LEFT JOIN accounts acc ON d.created_by = acc.id
-        LEFT JOIN distribution_products dp ON d.id = dp.distribution_id
-        LEFT JOIN products p ON dp.product_id = p.id
+                 'price', dp.unit_price,
+                 'subtotal', dp.quantity * dp.unit_price
+               ) ORDER BY dp.distribution_detail_id) FILTER (WHERE dp.distribution_detail_id IS NOT NULL) as products
+        FROM ordermgmt.distribution d
+        LEFT JOIN master.agency a ON d.agency_id = a.agency_id
+        LEFT JOIN auth.account acc ON d.created_by = acc.account_id
+        LEFT JOIN ordermgmt.distribution_detail dp ON d.distribution_id = dp.distribution_id
+        LEFT JOIN master.product p ON dp.product_id = p.product_id
         WHERE d.agency_id = $1
-        GROUP BY d.id, a.name, a.code, acc.username
+        GROUP BY d.distribution_id, a.name, a.code, acc.username
         ORDER BY d.created_at DESC
       `;
       params = [agencyId];
-    } else {
-      // Staff and admin can see all distributions
+    } else if (role === 'staff') {
+      // Staff can see distributions from agencies they manage
+      // For now, allow staff to see all distributions for testing
       query = `
-        SELECT d.*, a.name as agency_name, a.code as agency_code,
+        SELECT d.distribution_id, d.distribution_code, d.agency_id, d.order_date, d.delivery_date,
+               d.total_amount, d.status, d.notes, d.created_by, d.created_at, d.updated_at,
+               a.name as agency_name, a.code as agency_code,
                acc.username as created_by_name,
                json_agg(json_build_object(
                  'product_id', dp.product_id,
@@ -49,20 +54,50 @@ const getAllDistributions = async (req, res) => {
                  'product_code', p.code,
                  'quantity', dp.quantity,
                  'unit', p.unit,
-                 'price', dp.price,
-                 'subtotal', dp.quantity * dp.price
-               )) as products
-        FROM distributions d
-        LEFT JOIN agencies a ON d.agency_id = a.id
-        LEFT JOIN accounts acc ON d.created_by = acc.id
-        LEFT JOIN distribution_products dp ON d.id = dp.distribution_id
-        LEFT JOIN products p ON dp.product_id = p.id
-        GROUP BY d.id, a.name, a.code, acc.username
+                 'price', dp.unit_price,
+                 'subtotal', dp.quantity * dp.unit_price
+               ) ORDER BY dp.distribution_detail_id) FILTER (WHERE dp.distribution_detail_id IS NOT NULL) as products
+        FROM ordermgmt.distribution d
+        LEFT JOIN master.agency a ON d.agency_id = a.agency_id
+        LEFT JOIN auth.account acc ON d.created_by = acc.account_id
+        LEFT JOIN ordermgmt.distribution_detail dp ON d.distribution_id = dp.distribution_id
+        LEFT JOIN master.product p ON dp.product_id = p.product_id
+        GROUP BY d.distribution_id, a.name, a.code, acc.username
+        ORDER BY d.created_at DESC
+      `;
+      params = [];
+    } else {
+      // Admin can see all distributions
+      query = `
+        SELECT d.distribution_id, d.distribution_code, d.agency_id, d.order_date, d.delivery_date,
+               d.total_amount, d.status, d.notes, d.created_by, d.created_at, d.updated_at,
+               a.name as agency_name, a.code as agency_code,
+               acc.username as created_by_name,
+               json_agg(json_build_object(
+                 'product_id', dp.product_id,
+                 'product_name', p.name,
+                 'product_code', p.code,
+                 'quantity', dp.quantity,
+                 'unit', p.unit,
+                 'price', dp.unit_price,
+                 'subtotal', dp.quantity * dp.unit_price
+               ) ORDER BY dp.distribution_detail_id) FILTER (WHERE dp.distribution_detail_id IS NOT NULL) as products
+        FROM ordermgmt.distribution d
+        LEFT JOIN master.agency a ON d.agency_id = a.agency_id
+        LEFT JOIN auth.account acc ON d.created_by = acc.account_id
+        LEFT JOIN ordermgmt.distribution_detail dp ON d.distribution_id = dp.distribution_id
+        LEFT JOIN master.product p ON dp.product_id = p.product_id
+        GROUP BY d.distribution_id, a.name, a.code, acc.username
         ORDER BY d.created_at DESC
       `;
     }
     
     const result = await pool.query(query, params);
+    
+    console.log('[getAllDistributions] Role:', role);
+    console.log('[getAllDistributions] Query params:', params);
+    console.log('[getAllDistributions] Result count:', result.rows.length);
+    console.log('[getAllDistributions] First few rows:', JSON.stringify(result.rows.slice(0, 2), null, 2));
     
     res.json({
       success: true,
@@ -82,10 +117,11 @@ const getDistributionById = async (req, res) => {
   try {
     const { id } = req.params;
     const { role, agencyId } = req.user;
-    
+
     let query = `
-      SELECT d.*, a.name as agency_name, a.code as agency_code,
-             a.address as agency_address, a.phone as agency_phone,
+      SELECT d.distribution_id, d.distribution_code, d.agency_id, d.order_date, d.delivery_date,
+             d.total_amount, d.status, d.notes, d.created_by, d.created_at, d.updated_at,
+             a.name as agency_name, a.code as agency_code, a.address as agency_address, a.phone as agency_phone,
              acc.username as created_by_name,
              json_agg(json_build_object(
                'product_id', dp.product_id,
@@ -93,36 +129,36 @@ const getDistributionById = async (req, res) => {
                'product_code', p.code,
                'quantity', dp.quantity,
                'unit', p.unit,
-               'price', dp.price,
-               'subtotal', dp.quantity * dp.price
-             )) as products
-      FROM distributions d
-      LEFT JOIN agencies a ON d.agency_id = a.id
-      LEFT JOIN accounts acc ON d.created_by = acc.id
-      LEFT JOIN distribution_products dp ON d.id = dp.distribution_id
-      LEFT JOIN products p ON dp.product_id = p.id
-      WHERE d.id = $1
+               'price', dp.unit_price,
+               'subtotal', dp.quantity * dp.unit_price
+             ) ORDER BY dp.distribution_detail_id) FILTER (WHERE dp.distribution_detail_id IS NOT NULL) as products
+      FROM ordermgmt.distribution d
+      LEFT JOIN master.agency a ON d.agency_id = a.agency_id
+      LEFT JOIN auth.account acc ON d.created_by = acc.account_id
+      LEFT JOIN ordermgmt.distribution_detail dp ON d.distribution_id = dp.distribution_id
+      LEFT JOIN master.product p ON dp.product_id = p.product_id
+      WHERE d.distribution_id = $1
     `;
-    
+
     const params = [id];
-    
+
     // Agency can only view their own distributions
     if (role === 'agency') {
       query += ' AND d.agency_id = $2';
       params.push(agencyId);
     }
-    
-    query += ' GROUP BY d.id, a.name, a.code, a.address, a.phone, acc.username';
-    
+
+    query += ' GROUP BY d.distribution_id, a.name, a.code, a.address, a.phone, acc.username';
+
     const result = await pool.query(query, params);
-    
+
     if (result.rows.length === 0) {
       return res.status(404).json({
         success: false,
         message: 'Không tìm thấy phiếu phân phối'
       });
     }
-    
+
     res.json({
       success: true,
       data: result.rows[0]
@@ -144,7 +180,10 @@ const createDistribution = async (req, res) => {
     await client.query('BEGIN');
     
     const { products, deliveryAddress, notes } = req.body;
-    const { userId, role, agencyId } = req.user;
+    const { userId, role, agencyId, accountId } = req.user;
+    
+    // Use accountId if available, otherwise use userId (for backward compatibility)
+    const createdBy = accountId || userId;
     
     // Validate
     if (!products || products.length === 0) {
@@ -169,70 +208,82 @@ const createDistribution = async (req, res) => {
       }
     }
     
-    // Generate distribution code
+    // Generate distribution code - use DH prefix (Distribution/Đơn Hàng)
     const codeResult = await client.query(
-      'SELECT COUNT(*) as count FROM distributions'
+      "SELECT COALESCE(MAX(CAST(SUBSTRING(distribution_code FROM 3) AS INTEGER)), 0) + 1 as next_num FROM ordermgmt.distribution WHERE distribution_code ~ '^DH[0-9]+$'"
     );
-    const count = parseInt(codeResult.rows[0].count) + 1;
-    const code = `PP${String(count).padStart(5, '0')}`;
+    const nextNum = codeResult.rows[0].next_num;
+    const code = `DH${String(nextNum).padStart(3, '0')}`;
     
-    // Calculate total amount
+    // Calculate total amount using selling_price
     let totalAmount = 0;
     for (const product of products) {
       const priceResult = await client.query(
-        'SELECT price FROM products WHERE id = $1',
+        'SELECT selling_price FROM master.product WHERE product_id = $1',
         [product.productId]
       );
       if (priceResult.rows.length === 0) {
         throw new Error(`Sản phẩm ID ${product.productId} không tồn tại`);
       }
-      const price = priceResult.rows[0].price;
+      const price = priceResult.rows[0].selling_price;
       totalAmount += price * product.quantity;
     }
     
     // Check agency debt and credit limit
     if (role === 'agency') {
       const agencyResult = await client.query(
-        'SELECT current_debt, credit_limit FROM agencies WHERE id = $1',
+        'SELECT current_debt, debt_limit FROM master.agency WHERE agency_id = $1',
         [targetAgencyId]
       );
       
       if (agencyResult.rows.length > 0) {
-        const { current_debt, credit_limit } = agencyResult.rows[0];
+        const { current_debt, debt_limit } = agencyResult.rows[0];
         const newDebt = (current_debt || 0) + totalAmount;
         
-        if (newDebt > credit_limit) {
+        if (newDebt > debt_limit) {
           await client.query('ROLLBACK');
           return res.status(400).json({
             success: false,
-            message: `Vượt quá hạn mức công nợ. Hạn mức: ${credit_limit.toLocaleString('vi-VN')} VND, Công nợ hiện tại: ${current_debt.toLocaleString('vi-VN')} VND`
+            message: `Vượt quá hạn mức công nợ. Hạn mức: ${debt_limit.toLocaleString('vi-VN')} VND, Công nợ hiện tại: ${current_debt.toLocaleString('vi-VN')} VND`
           });
         }
       }
     }
     
+    // Get agency address for delivery_address if not provided
+    let finalDeliveryAddress = deliveryAddress;
+    if (!finalDeliveryAddress) {
+      const agencyAddressResult = await client.query(
+        'SELECT address FROM master.agency WHERE agency_id = $1',
+        [targetAgencyId]
+      );
+      if (agencyAddressResult.rows.length > 0) {
+        finalDeliveryAddress = agencyAddressResult.rows[0].address;
+      }
+    }
+    
     // Insert distribution
     const insertResult = await client.query(
-      `INSERT INTO distributions (code, agency_id, delivery_address, notes, status, total_amount, created_by, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
+      `INSERT INTO ordermgmt.distribution (distribution_code, agency_id, order_date, delivery_date, total_amount, status, notes, created_by, created_at, updated_at)
+       VALUES ($1, $2, CURRENT_DATE, NULL, $3, $4, $5, $6, NOW(), NOW())
        RETURNING *`,
-      [code, targetAgencyId, deliveryAddress, notes, 'pending', totalAmount, userId]
+      [code, targetAgencyId, totalAmount, 'pending', notes || '', createdBy]
     );
     
     const distribution = insertResult.rows[0];
     
-    // Insert distribution products
+    // Insert distribution details
     for (const product of products) {
       const priceResult = await client.query(
-        'SELECT price FROM products WHERE id = $1',
+        'SELECT selling_price FROM master.product WHERE product_id = $1',
         [product.productId]
       );
-      const price = priceResult.rows[0].price;
+      const price = priceResult.rows[0].selling_price;
       
       await client.query(
-        `INSERT INTO distribution_products (distribution_id, product_id, quantity, price)
-         VALUES ($1, $2, $3, $4)`,
-        [distribution.id, product.productId, product.quantity, price]
+        `INSERT INTO ordermgmt.distribution_detail (distribution_id, product_id, quantity, unit_price, total_price)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [distribution.distribution_id, product.productId, product.quantity, price, price * product.quantity]
       );
     }
     
@@ -266,7 +317,7 @@ const createDistribution = async (req, res) => {
   }
 };
 
-// Update distribution status
+// Update distribution status (staff/admin)
 const updateDistributionStatus = async (req, res) => {
   try {
     const { id } = req.params;
@@ -281,7 +332,7 @@ const updateDistributionStatus = async (req, res) => {
       });
     }
     
-    const validStatuses = ['pending', 'approved', 'rejected', 'delivered'];
+    const validStatuses = ['pending', 'approved', 'processing', 'shipping', 'delivered', 'cancelled'];
     if (!validStatuses.includes(status)) {
       return res.status(400).json({
         success: false,
@@ -290,9 +341,9 @@ const updateDistributionStatus = async (req, res) => {
     }
     
     const result = await pool.query(
-      `UPDATE distributions 
+      `UPDATE ordermgmt.distribution 
        SET status = $1, updated_at = NOW()
-       WHERE id = $2
+       WHERE distribution_id = $2
        RETURNING *`,
       [status, id]
     );

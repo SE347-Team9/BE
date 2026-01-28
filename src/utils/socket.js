@@ -36,6 +36,11 @@ const EVENTS = {
   IMPORT_CREATED: 'import:created',
   IMPORT_CONFIRMED: 'import:confirmed',
   
+  // Receive Order events
+  RECEIVE_ORDER_CREATED: 'receive_order:created',
+  RECEIVE_ORDER_UPDATED: 'receive_order:updated',
+  RECEIVE_ORDER_COMPLETED: 'receive_order:completed',
+  
   // Agency events
   AGENCY_CREATED: 'agency:created',
   AGENCY_UPDATED: 'agency:updated',

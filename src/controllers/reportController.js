@@ -3,7 +3,24 @@ const pool = require('../config/database');
 // GET all reports
 async function getAllReports(req, res) {
   try {
-    const query = 'SELECT * FROM reports ORDER BY "createdAt" DESC';
+    const query = `
+      SELECT 
+        r.id,
+        r.code,
+        r.title,
+        r.type,
+        r.period,
+        r.data,
+        r."createdBy" as "createdBy",
+        r.status,
+        r."createdAt" as "createdAt",
+        r."updatedAt" as "updatedAt",
+        s.full_name as "staffName"
+      FROM master.reports r
+      LEFT JOIN auth."user" u ON u.user_id = r."createdBy"
+      LEFT JOIN master.staff s ON s.staff_id = u.staff_id
+      ORDER BY r."createdAt" DESC
+    `;
     const result = await pool.query(query);
 
     res.json({
@@ -24,7 +41,15 @@ async function getReportById(req, res) {
   try {
     const { id } = req.params;
 
-    const query = 'SELECT * FROM reports WHERE id = $1';
+    const query = `
+      SELECT 
+        r.*,
+        s.full_name as "staffName"
+      FROM master.reports r
+      LEFT JOIN auth."user" u ON u.user_id = r."createdBy"
+      LEFT JOIN master.staff s ON s.staff_id = u.staff_id
+      WHERE r.id = $1
+    `;
     const result = await pool.query(query, [id]);
 
     if (result.rows.length === 0) {
@@ -60,7 +85,7 @@ async function createReport(req, res) {
     }
 
     const query = `
-      INSERT INTO reports (code, title, type, period, data, "createdBy", status)
+      INSERT INTO master.reports (code, title, type, period, data, "createdBy", status)
       VALUES ($1, $2, $3, $4, $5, $6, 'draft')
       RETURNING *
     `;
@@ -95,7 +120,7 @@ async function updateReport(req, res) {
     const { title, type, period, data, status } = req.body;
 
     const query = `
-      UPDATE reports
+      UPDATE master.reports
       SET title = COALESCE($1, title),
           type = COALESCE($2, type),
           period = COALESCE($3, period),
@@ -133,7 +158,7 @@ async function deleteReport(req, res) {
   try {
     const { id } = req.params;
 
-    const query = 'DELETE FROM reports WHERE id = $1 RETURNING *';
+    const query = 'DELETE FROM master.reports WHERE id = $1 RETURNING *';
     const result = await pool.query(query, [id]);
 
     if (result.rows.length === 0) {
